@@ -198,12 +198,19 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
 
     # The (iter_cga-1) steps of CGA
     for k in range(1, iter_cga):
-        path_cga[k] = np.argmax(np.abs(loss_grad(beta_cga[:, k-1])))
+        # choose the regressor that has maximal derivative but is not in the path_cga.
+        loss_grad_index = np.c_[np.arange(p), np.abs(loss_grad(beta_cga[:, k-1]))]
+        loss_grad_index = np.delete(loss_grad_index, path_cga[0:k], 0)
+        max_grad = np.argmax(loss_grad_index[:, 1])
+        path_cga[k] = loss_grad_index[max_grad, 0]
+        # create the loss function and its gradient and Hessian with respect y and chosen regressors.
         loss_cga = _logistic_loss(X[:, path_cga[0:k+1]], y)
         (loss_grad_cga, loss_hess_cga) = _logistic_grad_hess(X[:, path_cga[0:k+1]], y)
+        # solve the optimization problem
         x0 = beta_cga[path_cga[0:k+1], k]
         res = optimize.minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga,
                                 tol=tol, options=options)
+        # get the information
         beta_cga[path_cga[0:k+1], k] = res.x
         loss_path_cga[k] = res.fun
         hdic_cga[k] = _hd_information_criterion(ic, res.fun, k+1, wn, n, p)
@@ -474,7 +481,7 @@ class HighDimensionalLogisticRegression(BaseEstimator):
             beta_hat = np.r_[self.intercept_, self.coef_]
             S = spatial.distance.hamming(logistic(X, beta_hat) > 0.5, y > 0.5)
         else:
-            S = spatial.distance.hamming(logistic(self.X_, self.coef_) > 0.5, y > 0.5)
+            S = spatial.distance.hamming(logistic(X, self.coef_) > 0.5, y > 0.5)
         return S
 
     def tune_wn_via_ic(self, X, y, ic_wn='BIC', param_grid=np.linspace(0.6, 1.2, 10)):
