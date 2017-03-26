@@ -123,7 +123,8 @@ def _information_criterion(ic, loss, k, n):
     return val
 
 
-def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True, kn=3.0, method='dogleg', tol=1e-8, options=None):
+def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True, kn=3.0, method='dogleg',
+                                    tol=1e-8, options=None):
     """compute the path of Chebyshev greedy algorithm.
     Parameters
     ----------
@@ -218,7 +219,7 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
     return beta_cga, path_cga, hdic_cga, iter_cga, loss_path_cga
 
 
-def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options):
+def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimming):
     """use the three stage method(CGA+HDIC+Trim) to compute the model.
     Parameters
     ----------
@@ -289,7 +290,7 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options):
     model_size = model.shape[0]
     # exclude the variable if the value high-dimensional information criterion of exclusion model
     # is lower than original model.
-    if model_size > 1:
+    if model_size > 1 and trimming:
         for k in range(int(fit_intercept), k_hdic+1):
             # exclude the variable.
             model_trim_k = np.delete(model, k)
@@ -391,13 +392,15 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
         The total number of iterations of CGA.
     """
 
-    def __init__(self, ic='HQIC', wn=1.0, fit_intercept=True, kn=1.0, method='dogleg', tol=1e-8, options=None):
+    def __init__(self, ic='HQIC', wn=1.0, fit_intercept=True, kn=1.0, method='dogleg', tol=1e-8,
+                 options=None, trimming=True):
         self.ic = ic
         self.wn = wn
         self.fit_intercept = fit_intercept
         self.kn = kn
         self.method = method
         self.tol = tol
+        self.trimming = trimming
         self.options = options
 
     def fit(self, X, y):
@@ -416,8 +419,9 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
         """
         (X, y) = check_X_y(X, y)
         self.classes_ = np.unique(y)
-        (self.intercept_, self.coef_, self.model_, self.loss_, self.path_cga_, self.intercept_cga_, self.coef_cga_, self.hdic_cga_,
-         self.iter_cga_) = _cga_hdic_trim(X, y, self.ic, self.wn, self.fit_intercept, self.kn, self.method, self.tol, self.options)
+        (self.intercept_, self.coef_, self.model_, self.loss_, self.path_cga_, self.intercept_cga_, self.coef_cga_,
+         self.hdic_cga_, self.iter_cga_) = _cga_hdic_trim(X, y, self.ic, self.wn, self.fit_intercept, self.kn,
+                                                          self.method, self.tol, self.options, self.trimming)
 
         return self
 
@@ -464,7 +468,8 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
         ic_origin = _information_criterion(ic_wn, self.loss_, self.model_.shape[0], n)
 
         for wn_tune in param_grid:
-            reg = _cga_hdic_trim(X, y, self.ic, wn_tune, self.fit_intercept, self.kn, self.method, self.tol, self.options)
+            reg = _cga_hdic_trim(X, y, self.ic, wn_tune, self.fit_intercept, self.kn, self.method,
+                                 self.tol, self.options)
             ic_tune = _information_criterion(ic_wn, reg[3], reg[2].shape[0], n)
             if ic_tune < ic_origin:
                 self.wn = wn_tune
