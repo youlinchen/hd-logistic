@@ -12,7 +12,10 @@ from scipy import optimize, spatial
 
 # Define some useful function for chebyshev_greedy_algorithm_path and _cga_hdic_trim
 def logistic(X, beta):
-    return np.exp(X@beta) / (1+np.exp(X@beta))
+    lterm = X@beta
+    lterm[X@beta < 50.0] = np.exp(lterm[X@beta < 50.0]) / (1+np.exp(lterm[X@beta < 50.0]))
+    lterm[X @ beta >= 50.0] = 1.0
+    return lterm
 
 
 def _logistic_loss(X, y):
@@ -32,7 +35,10 @@ def _logistic_loss(X, y):
     """
     n = X.shape[0]
 
-    def loss(beta): return np.sum(np.log(1 + np.exp(X @ beta))/n) - y @ X @ beta/n
+    def loss(beta):
+            pterm = X @ beta
+            pterm[pterm < 50.0] = np.log(1 + np.exp(pterm[pterm < 50.0]))
+            return np.sum(pterm/n) - (y @ X @ beta)/n
 
     return loss
 
@@ -276,7 +282,7 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
 
     # CGA
     (beta_cga, path_cga, hdic_cga, iter_cga, loss_path_cga) = chebyshev_greedy_algorithm_path(
-        X, y, ic, wn, fit_intercept, kn, method, tol)
+        X, y, ic, wn, fit_intercept, kn, method, tol, options)
     if fit_intercept:
         X = np.c_[np.ones([n, 1]), X]
 
