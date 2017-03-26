@@ -5,7 +5,7 @@ High-dimensional Logistic Regression
 # Author: You-Lin Chen <youlinchen@galton.uchicago.edu>
 
 import numpy as np
-from sklearn.base import BaseEstimator
+from sklearn.linear_model.base import BaseEstimator, LinearClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from scipy import optimize, spatial
 
@@ -327,7 +327,7 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options):
     if fit_intercept:
         intercept = beta_hat[0]
         intercept_cga = beta_cga[0,:]
-        coef = beta_hat[1:]
+        coef = beta_hat[1:].reshape(1,-1)
         coef_cga = beta_cga[1:,:]
         hdic_cga = hdic_cga[1:]
         path_cga = path_cga[1:] - 1
@@ -337,12 +337,12 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options):
         intercept = np.zeros(1)
         intercept_cga = np.zeros(iter_cga)
         coef_cga = beta_cga
-        coef = beta_hat
+        coef = beta_hat.reshape(1,-1)
 
     return intercept, coef, model_trim, loss, path_cga, intercept_cga, coef_cga, hdic_cga, iter_cga
 
 
-class HighDimensionalLogisticRegression(BaseEstimator):
+class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
     """The High-dimensional Logistic Regression.
     Parameters
     ----------
@@ -415,6 +415,7 @@ class HighDimensionalLogisticRegression(BaseEstimator):
                 Returns self.
         """
         (X, y) = check_X_y(X, y)
+        self.classes_ = np.unique(y)
         (self.intercept_, self.coef_, self.model_, self.loss_, self.path_cga_, self.intercept_cga_, self.coef_cga_, self.hdic_cga_,
          self.iter_cga_) = _cga_hdic_trim(X, y, self.ic, self.wn, self.fit_intercept, self.kn, self.method, self.tol, self.options)
 
@@ -435,54 +436,11 @@ class HighDimensionalLogisticRegression(BaseEstimator):
         n = X.shape[0]
         if self.fit_intercept:
             X = np.c_[np.ones([n, 1]), X]
-            beta_hat = np.r_[self.intercept_, self.coef_]
-            P = logistic(X, beta_hat)
+            beta_hat = np.c_[self.intercept_, self.coef_]
+            P = logistic(X, beta_hat.T)
         else:
-            P = logistic(self.X_, self.coef_)
+            P = logistic(X, self.coef_.T)
         return P
-
-    def predict(self, X):
-        """predict the value.
-            return 1 if the probability is larger than 1. Otherwise, return 0.
-            ----------
-            X : nd-array, shape (n_samples, n_features)
-
-            Returns
-            -------
-            T : nd-array, shape (n_samples, n_features)
-                Returns the predicted value(0,1) of the sample in the model.
-        """
-        check_is_fitted(self, ['model_'])
-        X = check_array(X)
-        n = X.shape[0]
-        if self.fit_intercept:
-            X = np.c_[np.ones([n, 1]), X]
-            beta_hat = np.r_[self.intercept_, self.coef_]
-            return logistic(X, beta_hat) > 0.5
-        else:
-            return logistic(self.X_, self.coef_) > 0.5
-
-    def score(self, X, y):
-        """evaluate the goodness of the fitting model.
-            use the hamming distance between the predicted value and y.
-            ----------
-            X : nd-array, shape (n_samples, n_features)
-            y : nd-array, shape (n_samples,)
-
-            Returns
-            -------
-            S : float
-                Returns the score which is used to evaluate the goodness of the fitting model.
-        """
-        check_is_fitted(self, ['model_'])
-        n = X.shape[0]
-        if self.fit_intercept:
-            X = np.c_[np.ones([n, 1]), X]
-            beta_hat = np.r_[self.intercept_, self.coef_]
-            S = spatial.distance.hamming(logistic(X, beta_hat) > 0.5, y > 0.5)
-        else:
-            S = spatial.distance.hamming(logistic(X, self.coef_) > 0.5, y > 0.5)
-        return S
 
     def tune_wn_via_ic(self, X, y, ic_wn='BIC', param_grid=np.linspace(0.6, 1.2, 10)):
         """use information criterion to tune wn which is the magnitude of high-dimensional penalty and update the model.
