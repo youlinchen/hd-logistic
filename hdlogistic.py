@@ -5,9 +5,12 @@ High-dimensional Logistic Regression
 # Author: You-Lin Chen <youlinchen@galton.uchicago.edu>
 
 import numpy as np
+import pyipopt
 from sklearn.linear_model.base import BaseEstimator, LinearClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
-from scipy import optimize, spatial
+from scipy import optimize
+from ipopt import minimize_ipopt
+import time
 
 
 # Define some useful function for chebyshev_greedy_algorithm_path and _cga_hdic_trim
@@ -92,11 +95,11 @@ def _hd_information_criterion(ic, loss, k, wn, n, p):
         the value of the chosen information criterion given the loss and parameters.
     """
     val = 0.0
-    if ic == 'HQIC':
+    if ic is 'HQIC':
         val = 2.0 * n * loss + 2.0 * k * wn * np.log(np.log(n)) * np.log(p)
-    elif ic == 'AIC':
+    elif ic is 'AIC':
         val = 2.0 * n * loss + 2.0 * k * wn * np.log(p)
-    elif ic == 'BIC':
+    elif ic is 'BIC':
         val = 2.0 * n * loss + k * wn * np.log(n) * np.log(p)
     return val
 
@@ -120,13 +123,26 @@ def _information_criterion(ic, loss, k, n):
         the value of the chosen information criterion given the loss and parameters.
     """
     val = 0
-    if ic == 'HQIC':
+    if ic is 'HQIC':
         val = 2.0 * n * loss + k * np.log(np.log(n))
-    elif ic == 'AIC':
+    elif ic is 'AIC':
         val = 2.0 * n * loss + 2.0 * k
-    elif ic == 'BIC':
+    elif ic is 'BIC':
         val = 2.0 * n * loss + k * np.log(n)
     return val
+
+
+def _minimize(loss, x0, method, jac, hess, tol, options):
+    if method is 'pyipopt':
+        pyipopt.set_loglevel(0)
+        res = pyipopt.fmin_unconstrained(loss, x0, fprime=jac, fhess=hess, tol= tol)
+        return res[0], res[4]
+    elif method is 'ipopt':
+        res = minimize_ipopt(loss, x0, jac=jac)
+        return res.x, res.fun
+    else:
+        res = optimize.minimize(loss, x0, method=method, jac=jac, hess=hess, tol=tol, options=options)
+        return res.x, res.fun
 
 
 def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True, kn=3.0, method='dogleg',
@@ -195,13 +211,12 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
     # set the initial value
     x0 = beta_cga[0, 0:1]
     # use scipy.optimize.minimize to minimize the loss function given its gradient and Hessian.
-    res = optimize.minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga,
-                            tol=tol, options=options)
+    (res_x, res_fun) = _minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga, tol=tol, options=options)
     # extract the result of the optimization.
-    beta_cga[0, 0] = res.x[0]
-    loss_path_cga[0] = res.fun
+    beta_cga[0, 0] = res_x[0]
+    loss_path_cga[0] = res_fun
     # calculate the value of information criterion
-    hdic_cga[0] = _hd_information_criterion(ic, res.fun, 1, wn, n, p)
+    hdic_cga[0] = _hd_information_criterion(ic, res_fun, 1, wn, n, p)
 
     # The (iter_cga-1) steps of CGA
     for k in range(1, iter_cga):
@@ -215,12 +230,11 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
         (loss_grad_cga, loss_hess_cga) = _logistic_grad_hess(X[:, path_cga[0:k+1]], y)
         # solve the optimization problem
         x0 = beta_cga[path_cga[0:k+1], k]
-        res = optimize.minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga,
-                                tol=tol, options=options)
+        (res_x, res_fun) = _minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga, tol=tol, options=options)
         # get the information
-        beta_cga[path_cga[0:k+1], k] = res.x
-        loss_path_cga[k] = res.fun
-        hdic_cga[k] = _hd_information_criterion(ic, res.fun, k+1, wn, n, p)
+        beta_cga[path_cga[0:k+1], k] = res_x
+        loss_path_cga[k] = res_fun
+        hdic_cga[k] = _hd_information_criterion(ic, res_fun, k+1, wn, n, p)
 
     return beta_cga, path_cga, hdic_cga, iter_cga, loss_path_cga
 
@@ -306,10 +320,9 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
             # set the initial value.
             x0 = beta_cga[model_trim_k, k_hdic]
             # use scipy.optimize.minimize to minimize the loss function given its gradient and Hessian.
-            res = optimize.minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga,
-                                    tol=tol, options=options)
+            (res_x, res_fun) = _minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga, tol=tol, options=options)
             # calculate the value high-dimensional information criterion of exclusion model.
-            hdic_trim = _hd_information_criterion(ic, res.fun, k_hdic, wn, n, p)
+            hdic_trim = _hd_information_criterion(ic, res_fun, k_hdic, wn, n, p)
             # compare with the original model.
             if hdic_trim < hdic_cga[k_hdic]:
                 model_size -= 1
@@ -322,10 +335,9 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
         loss_cga = _logistic_loss(X[:, model_trim], y)
         (loss_grad_cga, loss_hess_cga) = _logistic_grad_hess(X[:, model_trim], y)
         x0 = beta_cga[model_trim, k_hdic]
-        res = optimize.minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga,
-                                tol=tol, options=options)
-        beta_hat[model_trim] = res.x
-        loss = res.fun
+        (res_x, res_fun) = _minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga, tol=tol, options=options)
+        beta_hat[model_trim] = res_x
+        loss = res_fun
     else:
         beta_hat[model] = beta_cga[model, k_hdic]
         loss = loss_path_cga[k_hdic]
@@ -451,35 +463,3 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
         else:
             P = logistic(X, self.coef_.T)
         return P
-
-    def tune_wn_via_ic(self, X, y, ic_wn='BIC', param_grid=np.linspace(0.6, 1.2, 10)):
-        """use information criterion to tune wn which is the magnitude of high-dimensional penalty and update the model.
-            ----------
-            X : nd-array, shape (n_samples, n_features)
-
-            y : nd-array, shape (n_samples,)
-
-            ic : str, {'HQIC', 'AIC', 'BIC'}
-                The information criterion for model selection.
-            param_grid : nd-array of list
-                The search range of wn.
-
-            Returns
-            -------
-            wn : float
-                The best parameter of wn in the sense of having minimal value of information criterion.
-        """
-        check_is_fitted(self, ['model_'])
-        n = X.shape[0]
-        ic_origin = _information_criterion(ic_wn, self.loss_, self.model_.shape[0], n)
-
-        for wn_tune in param_grid:
-            reg = _cga_hdic_trim(X, y, self.ic, wn_tune, self.fit_intercept, self.kn, self.method,
-                                 self.tol, self.options)
-            ic_tune = _information_criterion(ic_wn, reg[3], reg[2].shape[0], n)
-            if ic_tune < ic_origin:
-                self.wn = wn_tune
-                (self.intercept_, self.coef_, self.model_, self.loss_, self.path_cga_, self.intercept_cga_,
-                 self.coef_cga_, self.hdic_cga_, self.iter_cga_) = reg
-
-        return self.wn
