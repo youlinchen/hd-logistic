@@ -189,13 +189,12 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
     loss_path_cga : nd-array, shape (iter_cga,)
         The computed value of loss(the negative maximized value of the likelihood function) in each iteration.
     """
-    # Check the shape of X and y, and initialize the variables
-    (X, y) = check_X_y(X, y)
+    # initialize the variables
     n = X.shape[0]
     if fit_intercept:
         X = np.c_[np.ones([n, 1]), X]
     p = X.shape[1]
-    iter_cga = int(np.min([np.linalg.matrix_rank(X), np.ceil(kn * np.sqrt(n / np.log(p))) + int(fit_intercept)]))
+    iter_cga = int(np.ceil(kn * np.sqrt(n / np.log(p))) + int(fit_intercept))
     beta_cga = np.zeros([p, iter_cga])
     path_cga = np.zeros(iter_cga, dtype=np.int)
     hdic_cga = np.zeros(iter_cga)
@@ -267,6 +266,8 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
             disp : bool
                 Set to True to print convergence messages.
         For method-specific options, see the document for scipy.optimize.minimize.
+    trimming : bool
+        Whether to trim the model.
 
     Returns
     -------
@@ -345,9 +346,9 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
     # correct the index if fit_intercept is True.
     if fit_intercept:
         intercept = beta_hat[0]
-        intercept_cga = beta_cga[0,:]
-        coef = beta_hat[1:].reshape(1,-1)
-        coef_cga = beta_cga[1:,:]
+        intercept_cga = beta_cga[0, :]
+        coef = beta_hat[1:].reshape(1, -1)
+        coef_cga = beta_cga[1:, :]
         hdic_cga = hdic_cga[1:]
         path_cga = path_cga[1:] - 1
         model_trim = model_trim[1:] - 1
