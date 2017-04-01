@@ -212,7 +212,7 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
     # use scipy.optimize.minimize to minimize the loss function given its gradient and Hessian.
     (res_x, res_fun) = _minimize(loss_cga, x0, method=method, jac=loss_grad_cga, hess=loss_hess_cga, tol=tol, options=options)
     # extract the result of the optimization.
-    beta_cga[0, 0] = res_x[0]
+    beta_cga[path_cga[0], 0] = res_x[0]
     loss_path_cga[0] = res_fun
     # calculate the value of information criterion
     hdic_cga[0] = _hd_information_criterion(ic, res_fun, 1, wn, n, p)
@@ -220,10 +220,9 @@ def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True,
     # The (iter_cga-1) steps of CGA
     for k in range(1, iter_cga):
         # choose the regressor that has maximal derivative but is not in the path_cga.
-        loss_grad_index = np.c_[np.arange(p), np.abs(loss_grad(beta_cga[:, k-1]))]
-        loss_grad_index = np.delete(loss_grad_index, path_cga[0:k], 0)
-        max_grad = np.argmax(loss_grad_index[:, 1])
-        path_cga[k] = loss_grad_index[max_grad, 0]
+        loss_grad_abs = np.abs(loss_grad(beta_cga[:, k - 1]))
+        loss_grad_abs[path_cga[0:k]] = -1
+        path_cga[k] = np.argmax(loss_grad_abs)
         # create the loss function and its gradient and Hessian with respect y and chosen regressors.
         loss_cga = _logistic_loss(X[:, path_cga[0:k+1]], y)
         (loss_grad_cga, loss_hess_cga) = _logistic_grad_hess(X[:, path_cga[0:k+1]], y)
