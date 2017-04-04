@@ -16,8 +16,8 @@ import time
 # Define some useful function for chebyshev_greedy_algorithm_path and _cga_hdic_trim
 def logistic(X, beta):
     lterm = X@beta
-    lterm[X@beta < 50.0] = np.exp(lterm[X@beta < 50.0]) / (1+np.exp(lterm[X@beta < 50.0]))
-    lterm[X @ beta >= 50.0] = 1.0
+    lterm[lterm < 50.0] = np.exp(lterm[lterm < 50.0]) / (1+np.exp(lterm[lterm < 50.0]))
+    lterm[lterm >= 50.0] = 1.0
     return lterm
 
 
