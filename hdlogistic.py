@@ -5,11 +5,11 @@ High-dimensional Logistic Regression
 # Author: You-Lin Chen <youlinchen@galton.uchicago.edu>
 
 import numpy as np
-import pyipopt
+# import pyipopt
 from sklearn.linear_model.base import BaseEstimator, LinearClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from scipy import optimize
-from ipopt import minimize_ipopt
+# from ipopt import minimize_ipopt
 import time
 
 
@@ -133,16 +133,16 @@ def _information_criterion(ic, loss, k, n):
 
 
 def _minimize(loss, x0, method, jac, hess, tol, options):
-    if method is 'pyipopt':
-        pyipopt.set_loglevel(0)
-        res = pyipopt.fmin_unconstrained(loss, x0, fprime=jac, fhess=hess, tol= tol)
-        return res[0], res[4]
-    elif method is 'ipopt':
-        res = minimize_ipopt(loss, x0, jac=jac)
-        return res.x, res.fun
-    else:
-        res = optimize.minimize(loss, x0, method=method, jac=jac, hess=hess, tol=tol, options=options)
-        return res.x, res.fun
+    # if method is 'pyipopt':
+    #     pyipopt.set_loglevel(0)
+    #     res = pyipopt.fmin_unconstrained(loss, x0, fprime=jac, fhess=hess, tol= tol)
+    #     return res[0], res[4]
+    # elif method is 'ipopt':
+    #     res = minimize_ipopt(loss, x0, jac=jac)
+    #     return res.x, res.fun
+    # else:
+    res = optimize.minimize(loss, x0, method=method, jac=jac, hess=hess, tol=tol, options=options)
+    return res.x, res.fun
 
 
 def chebyshev_greedy_algorithm_path(X, y, ic='HQIC', wn=1.0, fit_intercept=True, kn=3.0, method='dogleg',
@@ -310,7 +310,7 @@ def _cga_hdic_trim(X, y, ic, wn, fit_intercept, kn, method, tol, options, trimmi
     model_size = model.shape[0]
     # exclude the variable if the value high-dimensional information criterion of exclusion model
     # is lower than original model.
-    if model_size > 1 and trimming:
+    if (model_size > 1) and trimming:
         for k in range(int(fit_intercept), k_hdic+1):
             # exclude the variable.
             model_trim_k = np.delete(model, k)
@@ -437,7 +437,7 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
         """
         (X, y) = check_X_y(X, y)
         self.classes_ = np.unique(y)
-        (self.intercept_, self.coef_, self.model_, self.loss_, self.path_cga_, self.intercept_cga_, self.coef_cga_,
+        (self.intercept_, self.coef_, self.model_trim, self.loss_, self.path_cga_, self.intercept_cga_, self.coef_cga_,
          self.hdic_cga_, self.iter_cga_) = _cga_hdic_trim(X, y, self.ic, self.wn, self.fit_intercept, self.kn,
                                                           self.method, self.tol, self.options, self.trimming)
 
@@ -453,13 +453,15 @@ class HighDimensionalLogisticRegression(BaseEstimator, LinearClassifierMixin):
             P : nd-array, shape (n_samples, n_features)
                 Returns the probability of the sample in the model.
         """
-        check_is_fitted(self, ['model_'])
+        check_is_fitted(self, ['model_trim'])
         X = check_array(X)
         n = X.shape[0]
         if self.fit_intercept:
             X = np.c_[np.ones([n, 1]), X]
             beta_hat = np.c_[self.intercept_, self.coef_]
-            P = logistic(X, beta_hat.T)
+            P = logistic(X, beta_hat.T).ravel()
         else:
-            P = logistic(X, self.coef_.T)
+            P = logistic(X, self.coef_.T).ravel()
         return P
+
+
